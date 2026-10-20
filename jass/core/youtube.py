@@ -106,25 +106,29 @@ async def _dedup_download(video_id: str, video: bool) -> str:
     cached = find_file(video_id, video)
     if cached:
         return cached
+
     key = f"{video_id}:{'video' if video else 'audio'}"
+
     if key in _in_progress:
         try:
             return await asyncio.shield(_in_progress[key])
-        except Exception:
-            return None
+        except Exception as e:
+            raise Exception(f"Download failed: {e}") from e
+
     loop = asyncio.get_event_loop()
     future = loop.create_future()
     _in_progress[key] = future
+
     try:
         result = await _arc_download(video_id, video)
         future.set_result(result)
         return result
     except Exception as e:
-        future.set_exception(e)
-        return None
+        if not future.done():
+            future.set_exception(e)
+        raise Exception(f"Download failed: {e}") from e
     finally:
         _in_progress.pop(key, None)
-
 
 async def download_song(link: str) -> str:
     video_id = link.split("v=")[-1].split("&")[0] if "v=" in link else link
@@ -341,16 +345,24 @@ class YouTubeAPI:
 
 async def get_track(query: str, video: bool = False) -> Track:
     results = VideosSearch(query, limit=1)
+
     try:
         data = (await asyncio.wait_for(results.next(), timeout=20))["result"][0]
     except Exception as e:
-        raise Exception(f"Search failed: {e}")
+        raise Exception(f"Search failed: {e}") from e
+
     video_id = data.get("id")
     if not video_id:
         raise Exception("No video ID found")
-    cached = await _dedup_download(video_id, video)
+
+    try:
+        cached = await _dedup_download(video_id, video)
+    except Exception as e:
+        raise Exception(f"Download failed for {video_id}: {e}") from e
+
     if not cached:
-        raise Exception("Download failed")
+        raise Exception(f"Download failed for {video_id}")
+
     return Track(
         title=data.get("title", "Unknown Track"),
         url=cached,
@@ -360,6 +372,5 @@ async def get_track(query: str, video: bool = False) -> Track:
         is_video=video,
         source="YouTube",
     )
-
 
 YouTube = YouTubeAPI()
