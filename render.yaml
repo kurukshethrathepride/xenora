@@ -1,0 +1,48 @@
+services:
+  - type: worker
+    name: abhi66
+    env: python
+    plan: free
+
+    buildCommand: "apt-get update && apt-get install -y --no-install-recommends ffmpeg git && rm -rf /var/lib/apt/lists/*"
+    startCommand: "python -m jass"
+
+    envVars:
+      - key: API_ID
+        sync: false
+
+      - key: API_HASH
+        sync: false
+
+      - key: BOT_TOKEN
+        sync: false
+
+      - key: MONGO_URI
+        value: "mongodb+srv://ChatSphereDB:RadheyMaa@chatspheredb.shxwz5d.mongodb.net/?retryWrites=true&w=majority"
+
+      - key: MONGO_DB_NAME
+        value: "JassCore"
+
+      - key: OWNER_ID
+        sync: false
+
+      - key: LOGGER_CHAT_ID
+        sync: false
+
+      - key: SESSION_STRING
+        sync: false
+
+      - key: SUPPORT_URL
+        sync: false
+
+      - key: BOT_USERNAME
+        sync: false
+
+      - key: ASSISTANT_USERNAME
+        sync: false
+
+      - key: PYTHON_VERSION
+        value: 3.11.9
+     
+      - key: PORT
+        value: "10000"
