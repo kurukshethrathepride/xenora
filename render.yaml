@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
 
-    buildCommand: "apt-get update && apt-get install -y --no-install-recommends ffmpeg git && rm -rf /var/lib/apt/lists/*"
+    buildCommand: "pip install --no-cache-dir -r requirements.txt"
     startCommand: "python -m jass"
 
     envVars:
