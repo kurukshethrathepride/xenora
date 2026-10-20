@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: abhi66
     env: python
     plan: free
