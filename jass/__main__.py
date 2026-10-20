@@ -1,10 +1,3 @@
-# ==========================================================
-# JassMusic
-# Copyright (c) 2026 Jass
-# Proprietary Software. Unauthorized copying, modification, distribution, or resale of this source code is strictly prohibited.
-# Developed by Jass (Jaskaran Singh)
-# © 2026 All Rights Reserved.
-# ==========================================================
 
 import asyncio
 from pyrogram import idle
@@ -39,15 +32,13 @@ async def start_bot():
     logger.info("PyTgCalls started")
 
     await startup_log()
-
     logger.info("JassMusic is running...")
 
-        try:
+    try:
         await idle()
     finally:
         logger.info("Stopping JassMusic...")
 
-        # Stop Telegram UI polling safely
         try:
             if ptb.updater and ptb.updater.running:
                 await ptb.updater.stop()
@@ -64,7 +55,6 @@ async def start_bot():
         except Exception as exc:
             logger.warning("PTB shutdown issue: %s", exc)
 
-        # Stop PyTgCalls only if this installed version supports it
         try:
             stop_call = getattr(call, "stop", None)
             if callable(stop_call):
@@ -73,8 +63,7 @@ async def start_bot():
                     await result
             else:
                 logger.warning(
-                    "This PyTgCalls version has no stop() method; "
-                    "skipping that shutdown step."
+                    "PyTgCalls has no stop() method; skipping."
                 )
         except Exception as exc:
             logger.warning("PyTgCalls shutdown issue: %s", exc)
@@ -92,5 +81,5 @@ async def start_bot():
         logger.info("JassMusic shutdown completed.")
 
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(start_bot())
+if __name__ == "__main__":
+    asyncio.run(start_bot())
