@@ -15,7 +15,7 @@ from pytgcalls.types import MediaStream, AudioQuality, VideoQuality
 from pyrogram.enums import ParseMode
 from jass import assistant
 from .queue import queue
-from .youtube import get_track
+from .youtube import get_track, set_telegram_media_client
 from .logger import error_log
 from ..helpers.buttons import player_buttons_ptb, player_close_button_ptb, player_close_button
 from ..helpers.premium import render as render_pyro
@@ -25,6 +25,8 @@ from jass.config import config
 
 ptb_bot = Bot(config.BOT_TOKEN)
 START_TIME = time.time()
+# Register the existing assistant for ARC cached Telegram media.
+set_telegram_media_client(assistant)
 
 loop_enabled = {}
 active = {}
