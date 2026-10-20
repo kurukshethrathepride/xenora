@@ -33,5 +33,6 @@ class Config:
     SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
     SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
     SAAVN_API_URL = os.getenv("SAAVN_API_URL", "https://saavn.sumit.co/api")
-
+    ARC_API_URL = os.getenv("ARC_API_URL", "https://portal.arcmusic.fun")
+    ARC_API_KEY = os.getenv("ARC_API_KEY", "ARC43de7f48ae9b163eb72787")
 config = Config()
