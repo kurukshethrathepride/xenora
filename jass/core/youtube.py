@@ -15,7 +15,7 @@ from py_yt import VideosSearch, Playlist
 API_URL = os.environ.get(
     "ARC_API_URL", "https://api.arcmusic.fun"
 ).rstrip("/")
-API_KEY = os.environ.get("ARC_API_KEY", "ARC713d225dfd9efa60c8dca4")
+API_KEY = os.environ.get("ARC_API_KEY", "")
 
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,10 +53,9 @@ async def _arc_download(video_id: str, video: bool = False) -> str:
     extension = "mp4" if video else "mp3"
     file_path = DOWNLOAD_DIR / f"{video_id}.{extension}"
 
-    timeout = aiohttp.ClientTimeout(total=30)
-
-    # Submit the download request and inspect the real API response.
+    # Submit the download request.
     data = None
+    timeout = aiohttp.ClientTimeout(total=30)
 
     for attempt in range(3):
         try:
@@ -73,7 +72,7 @@ async def _arc_download(video_id: str, video: bool = False) -> str:
                     if resp.status != 200:
                         body = await resp.text()
                         raise RuntimeError(
-                            f"ARC API HTTP {resp.status}: {body[:500]}"
+                            f"ARC API HTTP {resp.status}: {body[:300]}"
                         )
 
                     try:
@@ -85,12 +84,33 @@ async def _arc_download(video_id: str, video: bool = False) -> str:
 
                     if not isinstance(data, dict):
                         raise RuntimeError(
-                            "ARC API returned unexpected response type: "
-                            f"{type(data).__name__}"
+                            "ARC API returned an unexpected response type"
                         )
 
-                    if not data.get("job_id"):
+                    result = data.get("result") or {}
+
+                    # Cached Telegram media is not a queued job.
+                    if (
+                        data.get("status") == "success"
+                        and isinstance(result, dict)
+                        and result.get("success") is True
+                        and result.get("cached") is True
+                    ):
+                        cdn = result.get("cdn", "")
+
+                        raise RuntimeError(
+                            "ARC API returned cached media instead of a "
+                            "download job. CDN/message link: "
+                            f"{cdn or 'not provided'}. "
+                            "A Telegram media retrieval handler is required."
+                        )
+
+                    # A normal response must contain a job ID.
+                    job_id = data.get("job_id")
+
+                    if not job_id:
                         safe_data = dict(data)
+
                         for key in (
                             "api_key",
                             "key",
@@ -115,10 +135,13 @@ async def _arc_download(video_id: str, video: bool = False) -> str:
 
             await asyncio.sleep(3)
 
+    if not data or not data.get("job_id"):
+        raise RuntimeError("ARC API did not provide a download job")
+
     job_id = data["job_id"]
     public_url = ""
 
-    # Poll the job until it finishes or times out.
+    # Poll the download job.
     async with aiohttp.ClientSession() as session:
         for _ in range(30):
             await asyncio.sleep(3)
@@ -136,7 +159,9 @@ async def _arc_download(video_id: str, video: bool = False) -> str:
                         continue
 
                     try:
-                        status_data = await resp.json(content_type=None)
+                        status_data = await resp.json(
+                            content_type=None
+                        )
                     except (ValueError, aiohttp.ContentTypeError):
                         continue
 
@@ -157,7 +182,8 @@ async def _arc_download(video_id: str, video: bool = False) -> str:
 
                     if status == "failed":
                         raise RuntimeError(
-                            f"ARC job failed: {job.get('error', 'Unknown error')}"
+                            f"ARC job failed: "
+                            f"{job.get('error', 'Unknown error')}"
                         )
 
             except RuntimeError:
@@ -177,7 +203,7 @@ async def _arc_download(video_id: str, video: bool = False) -> str:
             + public_url
         )
 
-    # Download the resulting media file.
+    # Download the actual media file.
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
@@ -206,13 +232,14 @@ async def _arc_download(video_id: str, video: bool = False) -> str:
     raise RuntimeError("Downloaded media file is empty")
 
 
-async def _dedup_download(video_id: str, video: bool = False) -> Optional[str]:
+async def _dedup_download(
+    video_id: str, video: bool = False
+) -> Optional[str]:
     cached = find_file(video_id, video)
     if cached:
         return cached
 
     key = f"{video_id}:{'video' if video else 'audio'}"
-
     task = _in_progress.get(key)
 
     if task is None:
@@ -235,7 +262,11 @@ def extract_video_id(link: str) -> Optional[str]:
         return None
 
     if "youtu.be/" in link:
-        video_id = link.split("youtu.be/", 1)[1].split("?", 1)[0].split("/", 1)[0]
+        video_id = (
+            link.split("youtu.be/", 1)[1]
+            .split("?", 1)[0]
+            .split("/", 1)[0]
+        )
     elif "v=" in link:
         video_id = link.split("v=", 1)[1].split("&", 1)[0]
     else:
@@ -341,7 +372,9 @@ class YouTubeAPI:
             .split("?", 1)[0]
         )
         video_id = result.get("id", "")
-        duration_sec = time_to_seconds(duration_min) if duration_min else 0
+        duration_sec = (
+            time_to_seconds(duration_min) if duration_min else 0
+        )
 
         return title, duration_min, duration_sec, thumbnail, video_id
 
@@ -350,24 +383,21 @@ class YouTubeAPI:
         link: str,
         videoid: Union[bool, str] = None,
     ):
-        details = await self.details(link, videoid)
-        return details[0]
+        return (await self.details(link, videoid))[0]
 
     async def duration(
         self,
         link: str,
         videoid: Union[bool, str] = None,
     ):
-        details = await self.details(link, videoid)
-        return details[1]
+        return (await self.details(link, videoid))[1]
 
     async def thumbnail(
         self,
         link: str,
         videoid: Union[bool, str] = None,
     ):
-        details = await self.details(link, videoid)
-        return details[3]
+        return (await self.details(link, videoid))[3]
 
     async def video(
         self,
@@ -384,9 +414,7 @@ class YouTubeAPI:
             downloaded_file = await download_video(link)
             if downloaded_file:
                 return 1, downloaded_file
-
             return 0, "Video download failed"
-
         except Exception as exc:
             return 0, f"Video download error: {exc}"
 
@@ -482,7 +510,9 @@ class YouTubeAPI:
 
             for item in info.get("formats", []):
                 try:
-                    if "dash" not in str(item.get("format", "")).lower():
+                    if "dash" not in str(
+                        item.get("format", "")
+                    ).lower():
                         available.append({
                             "format": item.get("format", ""),
                             "filesize": item.get("filesize"),
@@ -513,7 +543,9 @@ class YouTubeAPI:
         items = response.get("result", [])
 
         if query_type < 0 or query_type >= len(items):
-            raise IndexError("Requested YouTube search result does not exist")
+            raise IndexError(
+                "Requested YouTube search result does not exist"
+            )
 
         result = items[query_type]
         title = result.get("title", "Unknown Track")
@@ -550,7 +582,6 @@ class YouTubeAPI:
                 return downloaded_file, True
 
             return None, False
-
         except Exception:
             return None, False
 
@@ -559,7 +590,9 @@ async def get_track(query: str, video: bool = False) -> Track:
     results = VideosSearch(query, limit=1)
 
     try:
-        response = await asyncio.wait_for(results.next(), timeout=20)
+        response = await asyncio.wait_for(
+            results.next(), timeout=20
+        )
         items = response.get("result", [])
 
         if not items:
@@ -572,23 +605,27 @@ async def get_track(query: str, video: bool = False) -> Track:
 
     video_id = data.get("id")
     if not video_id:
-        raise RuntimeError("YouTube search result did not contain a video ID")
+        raise RuntimeError(
+            "YouTube search result did not contain a video ID"
+        )
 
     try:
-        cached = await _dedup_download(video_id, video)
+        downloaded_file = await _dedup_download(video_id, video)
     except Exception as exc:
         raise RuntimeError(
             f"Download failed for {video_id}: {exc}"
         ) from exc
 
-    if not cached:
-        raise RuntimeError(f"Download failed for {video_id}: no file returned")
+    if not downloaded_file:
+        raise RuntimeError(
+            f"Download failed for {video_id}: no file returned"
+        )
 
     thumbnails = data.get("thumbnails") or [{}]
 
     return Track(
         title=data.get("title", "Unknown Track"),
-        url=cached,
+        url=downloaded_file,
         webpage_url=data.get("link") or (
             f"https://www.youtube.com/watch?v={video_id}"
         ),
