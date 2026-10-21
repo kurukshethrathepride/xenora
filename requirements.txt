@@ -1,7 +1,6 @@
 kurigram
 TgCrypto
-py-tgcalls==2.2.5
-ntgcalls
+py-tgcalls==2.3.3
 yt-dlp[default]>=2026.3.13
 motor
 python-dotenv
